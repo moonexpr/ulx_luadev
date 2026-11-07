@@ -13,12 +13,8 @@
 local CATEGORY = "LuaDev"
 
 -- the library both sides run: what a run says, and what !print shows
-if SERVER then
-	AddCSLuaFile("includes/modules/luadev_output.lua")
-	AddCSLuaFile("includes/modules/luadev_show.lua")
-end
-local Output = require("luadev_output")
-local Show = require("luadev_show")
+require("luadev_output")
+require("luadev_show")
 
 local function who(ply, name) return luadev.GetPlayerIdentifier(ply, "cmd:" .. name) end
 
@@ -62,8 +58,9 @@ local COMMANDS = {
 	{ "print", "Prints a value on the server, told in chat; one of easylua's (this, we, there, trace...) also shown"
 		.. " a moment where it is, e.g. !print this", function(line)
 		local name = line:match("^%s*(.-)%s*$")
-		if Show.RELATIVES[name] then
-			return { { "server", string.format("print(%s) require(%q).Show(me, %q, %s)", name, "luadev_show", name, name) } }
+		if luadev_show.RELATIVES[name] then
+			-- GMod's require returns nothing: the module is its global table
+			return { { "server", string.format("print(%s) require(%q) luadev_show.Show(me, %q, %s)", name, "luadev_show", name, name) } }
 		end
 		return { { "server", "print(" .. line .. ")" } }
 	end },
@@ -99,7 +96,7 @@ end
 
 -- What the caller's client plays: a run done, failed, or its work still going after a frame.
 local STILL_RUNNING = "Still running; no longer listening for its end."
-local PENDING, COMMITTED = Output.PENDING, Output.COMMITTED
+local PENDING, COMMITTED = luadev_output.PENDING, luadev_output.COMMITTED
 
 -- Plays the sound a setting names on ply's own client; the console has none, and an empty
 -- setting plays nothing.
@@ -138,7 +135,7 @@ end
 local function tell(ply, printed, values)
 	local maxlines = setting.maxlines:GetInt()
 	if maxlines <= 0 then return end
-	for _, line in ipairs(Output.Lines(printed, values, maxlines, setting.maxchars:GetInt())) do ULib.tsay(ply, line) end
+	for _, line in ipairs(luadev_output.Lines(printed, values, maxlines, setting.maxchars:GetInt())) do ULib.tsay(ply, line) end
 end
 
 -- runs each of runs as ply, once every script compiles; tells ply why not, and a run on the
@@ -154,16 +151,16 @@ local function run(ply, name, runs)
 		local where, script = r[1], r[2]
 		local ok, why, printed
 		if where == "server" then
-			printed, ok, why = Output.Captured(function() return luadev.RunOnServer(script, who(ply, name), extra) end)
+			printed, ok, why = luadev_output.Captured(function() return luadev.RunOnServer(script, who(ply, name), extra) end)
 		elseif where == "shared" then
-			printed, ok, why = Output.Captured(function() return luadev.RunOnShared(script, who(ply, name), extra) end)
+			printed, ok, why = luadev_output.Captured(function() return luadev.RunOnShared(script, who(ply, name), extra) end)
 		elseif where == "clients" then ok, why = luadev.RunOnClients(script, who(ply, name), extra)
 		else ok, why = luadev.RunOnClient(script, where == "me" and ply or where, who(ply, name), extra)
 		end
 		if not ok then return failed(ply, tostring(why)) end
 		if printed then
 			tell(ply, printed, why)
-			work = work or Output.Work(why)
+			work = work or luadev_output.Work(why)
 		end
 	end
 	cue_done(ply, work)
@@ -225,7 +222,7 @@ local WHERE = { type = ULib.cmds.StringArg, hint = "server|shared|clients", comp
 -- it printed
 local function console(ply, file, command, args)
 	if not luadev.RealFilePath(file) then return failed(ply, "luadev finds no file " .. file) end
-	local printed = Output.Captured(function() concommand.Run(NULL, command, args, table.concat(args, " ")) end)
+	local printed = luadev_output.Captured(function() concommand.Run(NULL, command, args, table.concat(args, " ")) end)
 	tell(ply, printed, nil)
 	cue_done(ply, nil)
 end
@@ -246,7 +243,7 @@ add("lwatch", "Sends a Lua file again each time it changes on disk, as lua_watch
 
 add("lunwatch", "Stops watching a file !lwatch watches, by its place in the list, or every one, e.g. !lunwatch 1",
 	function(ply, index)
-		local printed = Output.Captured(function() concommand.Run(NULL, "lua_watch_kill", { index or "" }, index or "") end)
+		local printed = luadev_output.Captured(function() concommand.Run(NULL, "lua_watch_kill", { index or "" }, index or "") end)
 		tell(ply, printed, nil)
 		cue_done(ply, nil)
 	end, { { type = ULib.cmds.StringArg, hint = "index (none: all)", ULib.cmds.optional } })

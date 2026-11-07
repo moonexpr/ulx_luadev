@@ -1,3 +1,5 @@
+AddCSLuaFile()
+
 -- luadev_show (ulx_luadev's): what !print of one of easylua's relative names draws for its
 -- caller, for sv_luadev_output_overlay seconds: a box around each entity (me, this, we, wep, veh,
 -- phys's) with lines describing it, a line from the caller's eye to each position (there, here),
@@ -16,7 +18,8 @@ local hook, net, util, render, draw = hook, net, util, render, draw
 local Vector, Angle, Color = Vector, Angle, Color
 local _G, ipairs, pairs, tostring, type = _G, ipairs, pairs, tostring, type
 local floor, sqrt, format, remove = math.floor, math.sqrt, string.format, table.remove
-module(...)
+
+module("luadev_show", package.seeall)
 
 RELATIVES = { me = true, this = true, we = true, wep = true, veh = true, phys = true, there = true, here = true,
 	dir = true, trace = true }

@@ -1,3 +1,5 @@
+AddCSLuaFile()
+
 -- luadev_output (ulx_luadev's): what a run says: the output it printed, the lines its caller is
 -- told, and work it returned that goes on after it.
 --   Captured(fn) -> what fn printed while it ran (print, Msg, MsgN, MsgC), as text, still printed
@@ -9,7 +11,8 @@
 --     OnSettle(fn) (a transaction), still PENDING; nil for none
 local _G, ipairs, pairs, pcall, select, tostring, type, unpack, error = _G, ipairs, pairs, pcall, select, tostring, type, unpack, error
 local concat, format, min = table.concat, string.format, math.min
-module(...)
+module("luadev_output", package.seeall)
+
 
 -- The states a transaction's State() answers.
 PENDING, COMMITTED = "pending", "committed"
