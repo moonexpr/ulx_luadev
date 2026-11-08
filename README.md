@@ -61,15 +61,16 @@ end)
 
 ## Convars
 
-Set on the server, for example in `server.cfg`, and read as they are used.
+Each player's own preferences, set in their client's console and saved there. The server reads
+them as they are used. Commands run from the server console use the defaults.
 
 | Convar | Default | What it sets |
 |---|---|---|
-| `sv_luadev_output_maxlines` | `1` | Lines of output told in chat; `0` for none |
-| `sv_luadev_output_maxchars` | `120` | Length of a line in chat; `0` for uncut |
-| `sv_luadev_output_overlay` | `2` | Seconds `!print` shows a relative name; `0` for not |
-| `sv_luadev_output_timeout` | `10` | Seconds a run's work is listened for |
-| `sv_luadev_output_success` | `buttons/button14.wav` | Success sound; empty for none |
-| `sv_luadev_output_error` | `buttons/button10.wav` | Error sound; empty for none |
-| `sv_luadev_output_progress` | `buttons/blip1.wav` | In-progress sound; empty for none |
-| `sv_luadev_output_neutral` | `buttons/button16.wav` | Sound at the timeout; empty for none |
+| `cl_luadev_output_maxlines` | `1` | Lines of output told in chat; `0` for none |
+| `cl_luadev_output_maxchars` | `120` | Length of a line in chat; `0` for uncut |
+| `cl_luadev_output_overlay` | `2` | Seconds `!print` shows a relative name; `0` for not |
+| `cl_luadev_output_timeout` | `10` | Seconds a run's work is listened for |
+| `cl_luadev_output_success` | `buttons/button14.wav` | Success sound; empty for none |
+| `cl_luadev_output_error` | `buttons/button10.wav` | Error sound; empty for none |
+| `cl_luadev_output_progress` | `buttons/blip1.wav` | In-progress sound; empty for none |
+| `cl_luadev_output_neutral` | `buttons/button16.wav` | Sound at the timeout; empty for none |

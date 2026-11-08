@@ -1,7 +1,7 @@
 AddCSLuaFile()
 
 -- luadev_show (ulx_luadev's): what !print of one of easylua's relative names draws for its
--- caller, for sv_luadev_output_overlay seconds: a box around each entity (me, this, we, wep, veh,
+-- caller, for its cl_luadev_output_overlay seconds: a box around each entity (me, this, we, wep, veh,
 -- phys's) with lines describing it, a line from the caller's eye to each position (there, here),
 -- along the aim (dir), and along a trace with a box around what it hit. Drawn by this module on
 -- the caller's own client, which needs no developer convar, as debugoverlay does.
@@ -13,7 +13,7 @@ AddCSLuaFile()
 --     { kind = "line", from, to, lines } for what name holds; none for nothing
 --   Show(ply, name, value) -> sends ply the shapes, other addons' lines from the hook
 --     ULXLuaDevDescribe(ent, lines) (server)
-local SERVER, CLIENT, IsValid, GetConVar, CurTime = SERVER, CLIENT, IsValid, GetConVar, CurTime
+local SERVER, CLIENT, IsValid, CurTime = SERVER, CLIENT, IsValid, CurTime
 local hook, net, util, render, draw = hook, net, util, render, draw
 local Vector, Angle, Color = Vector, Angle, Color
 local _G, ipairs, pairs, tostring, type = _G, ipairs, pairs, tostring, type
@@ -124,9 +124,9 @@ if SERVER then
 	local function More(ent, lines) hook.Run(HOOK, ent, lines) end
 
 	function Show(ply, name, value)
-		local overlay = GetConVar("sv_luadev_output_overlay")
-		local seconds = overlay and overlay:GetFloat() or 0
-		if not IsValid(ply) or seconds <= 0 then return end
+		if not IsValid(ply) then return end
+		local seconds = ply:GetInfoNum("cl_luadev_output_overlay", 0)
+		if seconds <= 0 then return end
 		net.Start(NET)
 		net.WriteFloat(seconds)
 		net.WriteTable(Shapes(name, value, ply:EyePos(), { schedules = Schedules(), more = More }))

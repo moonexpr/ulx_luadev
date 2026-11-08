@@ -6,10 +6,10 @@
 -- not answer, so a run only on them tells nothing. Its caller's client hears how it went: a
 -- success cue, an error cue, or, for work it returned still going a frame later (a transaction:
 -- a value with State() and OnSettle(fn)), a blip, then the cue for how the work settled; still going once it is no longer
--- listened for, it is told so, with a neutral cue, and its end goes unheard. Each is a server convar
--- a server.cfg sets, read as it is used: sv_luadev_output_maxlines (lines told, 0 for none),
--- _maxchars (a line's length, 0 for whole), _timeout (seconds listened), and the sounds
--- _success, _error, _progress and _neutral (a path, empty for none).
+-- listened for, it is told so, with a neutral cue, and its end goes unheard. Each is its caller's
+-- preference, saved on its client and read as it is used: cl_luadev_output_maxlines (lines told,
+-- 0 for none), _maxchars (a line's length, 0 for whole), _timeout (seconds listened), and the
+-- sounds _success, _error, _progress and _neutral (a path, empty for none).
 local CATEGORY = "LuaDev"
 
 -- the library both sides run: what a run says, and what !print shows
@@ -78,30 +78,42 @@ local COMMANDS = {
 	end },
 }
 
--- The server's settings, sv_luadev_output_*, created where the commands run.
-local setting = {}
-if SERVER then
-	local function Setting(name, default, help, min)
-		setting[name] = CreateConVar("sv_luadev_output_" .. name, default, nil, help, min)
-	end
-	Setting("maxlines", "1", "How many lines of a luadev command's output its caller is told in chat; 0 for none", 0)
-	Setting("maxchars", "120", "How long a line of a luadev command's output in chat is: a longer one is cut, saying how many more it had; 0 for uncut", 0)
-	Setting("overlay", "2", "How long !print of one of easylua's relative names (this, we, there, trace...) is shown to its caller, in seconds; 0 for not", 0)
-	Setting("timeout", "10", "How long a luadev command listens for the work its run returned before saying it still runs", 0)
-	Setting("success", "buttons/button14.wav", "The sound a luadev command's caller hears when its run went through; empty for none")
-	Setting("error", "buttons/button10.wav", "The sound a luadev command's caller hears when its run did not compile, failed or was refused; empty for none")
-	Setting("progress", "buttons/blip1.wav", "The sound a luadev command's caller hears when the work its run returned is still going a frame later; empty for none")
-	Setting("neutral", "buttons/button16.wav", "The sound a luadev command's caller hears when it stops listening for work still going; empty for none")
+-- Each caller's preferences, cl_luadev_output_*: made on its client, which saves them and tells
+-- the server them as userinfo. The console has no client, and goes by the defaults.
+local PREFERENCE = "cl_luadev_output_"
+local default = {}
+local function Preference(name, value, help, min)
+	default[name] = value
+	if CLIENT then CreateClientConVar(PREFERENCE .. name, value, true, true, help, min) end
+end
+Preference("maxlines", "1", "How many lines of a luadev command's output you are told in chat; 0 for none", 0)
+Preference("maxchars", "120", "How long a line of a luadev command's output in chat is: a longer one is cut, saying how many more it had; 0 for uncut", 0)
+Preference("overlay", "2", "How long !print of one of easylua's relative names (this, we, there, trace...) is shown to you, in seconds; 0 for not", 0)
+Preference("timeout", "10", "How long a luadev command listens for the work its run returned before saying it still runs", 0)
+Preference("success", "buttons/button14.wav", "The sound you hear when a luadev command's run went through; empty for none")
+Preference("error", "buttons/button10.wav", "The sound you hear when a luadev command's run did not compile, failed or was refused; empty for none")
+Preference("progress", "buttons/blip1.wav", "The sound you hear when the work a luadev command's run returned is still going a frame later; empty for none")
+Preference("neutral", "buttons/button16.wav", "The sound you hear when a luadev command stops listening for work still going; empty for none")
+
+local function PreferredText(ply, name)
+	if not IsValid(ply) then return default[name] end
+	return ply:GetInfo(PREFERENCE .. name)
+end
+
+local function PreferredNumber(ply, name)
+	local fallback = tonumber(default[name])
+	if not IsValid(ply) then return fallback end
+	return ply:GetInfoNum(PREFERENCE .. name, fallback)
 end
 
 -- What the caller's client plays: a run done, failed, or its work still going after a frame.
 local STILL_RUNNING = "Still running; no longer listening for its end."
 local PENDING, COMMITTED = luadev_output.PENDING, luadev_output.COMMITTED
 
--- Plays the sound a setting names on ply's own client; the console has none, and an empty
--- setting plays nothing.
+-- Plays the sound ply's preference names on its own client; the console has none, and an empty
+-- preference plays nothing.
 local function cue(ply, which)
-	local sound = setting[which]:GetString()
+	local sound = PreferredText(ply, which)
 	if IsValid(ply) and sound ~= "" then ULib.clientRPC(ply, "surface.PlaySound", sound) end
 end
 
@@ -112,7 +124,7 @@ end
 
 
 -- The caller's cue for a run that went through: success now, or, for work still going a frame
--- later, a blip, then the cue for how it settled; still going after sv_luadev_output_timeout
+-- later, a blip, then the cue for how it settled; still going after cl_luadev_output_timeout
 -- seconds, a word and a neutral cue, and no more.
 local function cue_done(ply, work)
 	if not work then return cue(ply, "success") end
@@ -123,7 +135,7 @@ local function cue_done(ply, work)
 	timer.Simple(0, function()
 		if work:State() == PENDING then cue(ply, "progress") end
 	end)
-	timer.Simple(setting.timeout:GetFloat(), function()
+	timer.Simple(PreferredNumber(ply, "timeout"), function()
 		if work:State() ~= PENDING then return end
 		listening = false
 		ULib.tsay(ply, STILL_RUNNING)
@@ -131,11 +143,11 @@ local function cue_done(ply, work)
 	end)
 end
 
--- tells ply what a run on the server printed or returned, as sv_luadev_output_* say
+-- tells ply what a run on the server printed or returned, as its cl_luadev_output_* say
 local function tell(ply, printed, values)
-	local maxlines = setting.maxlines:GetInt()
+	local maxlines = math.floor(PreferredNumber(ply, "maxlines"))
 	if maxlines <= 0 then return end
-	for _, line in ipairs(luadev_output.Lines(printed, values, maxlines, setting.maxchars:GetInt())) do ULib.tsay(ply, line) end
+	for _, line in ipairs(luadev_output.Lines(printed, values, maxlines, math.floor(PreferredNumber(ply, "maxchars")))) do ULib.tsay(ply, line) end
 end
 
 -- runs each of runs as ply, once every script compiles; tells ply why not, and a run on the
