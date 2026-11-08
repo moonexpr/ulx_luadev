@@ -14,7 +14,7 @@ local CATEGORY = "LuaDev"
 
 -- the library both sides run: what a run says, and what !print shows
 require("luadev_output")
-require("luadev_show")
+require("luadev_overlay")
 
 local function who(ply, name) return luadev.GetPlayerIdentifier(ply, "cmd:" .. name) end
 
@@ -58,9 +58,9 @@ local COMMANDS = {
 	{ "print", "Prints a value on the server, told in chat; one of easylua's (this, we, there, trace...) also shown"
 		.. " a moment where it is, e.g. !print this", function(line)
 		local name = line:match("^%s*(.-)%s*$")
-		if luadev_show.RELATIVES[name] then
+		if luadev_overlay.RELATIVES[name] then
 			-- GMod's require returns nothing: the module is its global table
-			return { { "server", string.format("print(%s) require(%q) luadev_show.Show(me, %q, %s)", name, "luadev_show", name, name) } }
+			return { { "server", string.format("print(%s) require(%q) luadev_overlay.Show(me, %q, %s)", name, "luadev_overlay", name, name) } }
 		end
 		return { { "server", "print(" .. line .. ")" } }
 	end },
@@ -88,7 +88,7 @@ local function Preference(name, value, help, min)
 end
 Preference("maxlines", "1", "How many lines of a luadev command's output you are told in chat; 0 for none", 0)
 Preference("maxchars", "120", "How long a line of a luadev command's output in chat is: a longer one is cut, saying how many more it had; 0 for uncut", 0)
-Preference("overlay", "2", "How long !print of one of easylua's relative names (this, we, there, trace...) is shown to you, in seconds; 0 for not", 0)
+Preference("overlay", "120", "How long !print of one of easylua's relative names (this, we, there, trace...) is shown to you, in seconds; 0 for not", 0)
 Preference("timeout", "10", "How long a luadev command listens for the work its run returned before saying it still runs", 0)
 Preference("success", "buttons/button14.wav", "The sound you hear when a luadev command's run went through; empty for none")
 Preference("error", "buttons/button10.wav", "The sound you hear when a luadev command's run did not compile, failed or was refused; empty for none")

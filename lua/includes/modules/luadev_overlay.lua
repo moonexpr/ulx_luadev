@@ -1,6 +1,6 @@
 AddCSLuaFile()
 
--- luadev_show (ulx_luadev's): what !print of one of easylua's relative names draws for its
+-- luadev_overlay (ulx_luadev's): what !print of one of easylua's relative names draws for its
 -- caller, for its cl_luadev_output_overlay seconds: a box around each entity (me, this, we, wep, veh,
 -- phys's) with lines describing it, a line from the caller's eye to each position (there, here),
 -- along the aim (dir), and along a trace with a box around what it hit. Drawn by this module on
@@ -11,22 +11,28 @@ AddCSLuaFile()
 --     an engine NPC's by opts.schedules, id -> SCHED_ name); then opts.more(ent, lines)'s
 --   Shapes(name, value, eye, opts) -> { kind = "box", pos, ang, mins, maxs, lines } and
 --     { kind = "line", from, to, lines } for what name holds; none for nothing
+--   Columns(lines) -> { key, value } for each line, split at its first colon, the key keeping it
+--   TextAt(shape, right) -> the point a shape's text starts from: on the view's right of it, clear
+--     of a box however it turns and level with its middle
 --   Show(ply, name, value) -> sends ply the shapes, other addons' lines from the hook
 --     ULXLuaDevDescribe(ent, lines) (server)
-local SERVER, CLIENT, IsValid, CurTime = SERVER, CLIENT, IsValid, CurTime
-local hook, net, util, render, draw = hook, net, util, render, draw
+local SERVER, CLIENT, IsValid, CurTime, EyePos, EyeAngles = SERVER, CLIENT, IsValid, CurTime, EyePos, EyeAngles
+local hook, net, util, render, draw, cam, surface = hook, net, util, render, draw, cam, surface
 local Vector, Angle, Color = Vector, Angle, Color
+local TEXT_ALIGN_LEFT, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER = TEXT_ALIGN_LEFT, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER
 local _G, ipairs, pairs, tostring, type = _G, ipairs, pairs, tostring, type
-local floor, sqrt, format, remove = math.floor, math.sqrt, string.format, table.remove
+local floor, sqrt, abs, max, format, remove = math.floor, math.sqrt, math.abs, math.max, string.format, table.remove
 
-module("luadev_show", package.seeall)
+module("luadev_overlay", package.seeall)
 
 RELATIVES = { me = true, this = true, we = true, wep = true, veh = true, phys = true, there = true, here = true,
 	dir = true, trace = true }
 -- How far along the aim dir's line runs.
 DIR_LENGTH = 128
+-- How far past a shape its text starts, in units.
+TEXT_GAP = 4
 
-local NET = "luadev_show"
+local NET = "luadev_overlay"
 local HOOK = "ULXLuaDevDescribe"
 
 local function Round(n) return floor(n + 0.5) end
@@ -107,6 +113,27 @@ function Shapes(name, value, eye, opts)
 	return {}
 end
 
+function Columns(lines)
+	local rows = {}
+	for i, line in ipairs(lines) do
+		local key, value = line:match("^([^:]*:)%s*(.*)$")
+		rows[i] = { key = key or "", value = value or line }
+	end
+	return rows
+end
+
+local function Along(p, direction, length)
+	return { x = p.x + direction.x * length, y = p.y + direction.y * length, z = p.z + direction.z * length }
+end
+
+function TextAt(shape, right)
+	if shape.kind ~= "box" then return Along(shape.to, right, TEXT_GAP) end
+	local mins, maxs = shape.mins, shape.maxs
+	local x, y = max(abs(mins.x), abs(maxs.x)), max(abs(mins.y), abs(maxs.y))
+	local middle = { x = shape.pos.x, y = shape.pos.y, z = shape.pos.z + (mins.z + maxs.z) / 2 }
+	return Along(middle, right, sqrt(x * x + y * y) + TEXT_GAP)
+end
+
 if SERVER then
 	util.AddNetworkString(NET)
 
@@ -136,23 +163,53 @@ end
 
 if CLIENT then
 	local BOX_COLOR, LINE_COLOR, TEXT_COLOR = Color(80, 220, 255), Color(255, 220, 60), Color(255, 255, 255)
-	local OUTLINE, LINE_HEIGHT = Color(0, 0, 0), 14
+	local OUTLINE, LINE_HEIGHT, FONT = Color(0, 0, 0), 14, "DermaDefault"
+	-- The gap between a line's colon and its value, in the text's pixels.
+	local VALUE_GAP = 4
+	-- A pixel of text's size in units, per unit away: about a screen's pixel at the default field
+	-- of view, so the text reads the same at any distance.
+	local TEXT_SCALE = 0.0014
 	local shown = {}
+
+	-- The widest of the rows' keys, where their colons line up.
+	local function KeyWidth(rows)
+		surface.SetFont(FONT)
+		local widest = 0
+		for _, row in ipairs(rows) do widest = max(widest, (surface.GetTextSize(row.key))) end
+		return widest
+	end
 
 	net.Receive(NET, function()
 		local seconds = net.ReadFloat()
-		for _, shape in ipairs(net.ReadTable()) do
+		-- each overlay replaces the last, ending its draws
+		shown = net.ReadTable()
+		for _, shape in ipairs(shown) do
 			shape.untilTime = CurTime() + seconds
-			shown[#shown + 1] = shape
+			shape.rows = Columns(shape.lines)
+			shape.keyWidth = KeyWidth(shape.rows)
 		end
 	end)
 
 	local function Vect3(p) return Vector(p.x, p.y, p.z) end
 
-	-- Where a shape's lines are written: above a box, at a line's end.
-	local function Anchor(shape)
-		if shape.kind == "box" then return Vect3(shape.pos) + Vector(0, 0, shape.maxs.z + 8) end
-		return Vect3(shape.to)
+	-- The angles a 3D2D plane takes to face the view, its x along the view's right and its y down.
+	local function Facing(view)
+		local facing = Angle(view.p, view.y, view.r)
+		facing:RotateAroundAxis(facing:Forward(), 90)
+		facing:RotateAroundAxis(facing:Right(), 90)
+		return facing
+	end
+
+	-- A shape's lines, facing the view at the right of the shape: keys up to the colons, values from them.
+	local function DrawText(shape, eye, right, facing)
+		local at = Vect3(TextAt(shape, right))
+		cam.Start3D2D(at, facing, at:Distance(eye) * TEXT_SCALE)
+		for i, row in ipairs(shape.rows) do
+			local y = (i - (#shape.rows + 1) / 2) * LINE_HEIGHT
+			draw.SimpleTextOutlined(row.key, FONT, shape.keyWidth, y, TEXT_COLOR, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 1, OUTLINE)
+			draw.SimpleTextOutlined(row.value, FONT, shape.keyWidth + VALUE_GAP, y, TEXT_COLOR, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, 1, OUTLINE)
+		end
+		cam.End3D2D()
 	end
 
 	local function Expire()
@@ -162,8 +219,8 @@ if CLIENT then
 		end
 	end
 
-	hook.Add("PostDrawTranslucentRenderables", NET, function(_, sky)
-		if sky then return end
+	hook.Add("PostDrawTranslucentRenderables", NET, function(depth, sky)
+		if depth or sky then return end
 		Expire()
 		for _, shape in ipairs(shown) do
 			if shape.kind == "box" then
@@ -173,17 +230,10 @@ if CLIENT then
 				render.DrawWireframeSphere(Vect3(shape.to), 4, 6, 6, LINE_COLOR, false)
 			end
 		end
-	end)
-
-	hook.Add("HUDPaint", NET, function()
-		for _, shape in ipairs(shown) do
-			local at = Anchor(shape):ToScreen()
-			if at.visible then
-				for i, line in ipairs(shape.lines) do
-					draw.SimpleTextOutlined(line, "DermaDefault", at.x, at.y + (i - #shape.lines) * LINE_HEIGHT, TEXT_COLOR,
-						1, 1, 1, OUTLINE)
-				end
-			end
-		end
+		local eye, view = EyePos(), EyeAngles()
+		local right, facing = view:Right(), Facing(view)
+		cam.IgnoreZ(true) -- read through walls, as the box's owner may stand behind one
+		for _, shape in ipairs(shown) do DrawText(shape, eye, right, facing) end
+		cam.IgnoreZ(false)
 	end)
 end

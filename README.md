@@ -2,7 +2,23 @@
 
 A Garry's Mod addon that gives [ULX](https://github.com/TeamUlysses/ulx) commands for
 [luadev](https://github.com/Metastruct/luadev) and easylua, on a server with ULX and no aowl.
-Install it in `garrysmod/addons/` beside ULX and luadev.
+
+## Install
+
+It needs [ULib](https://github.com/TeamUlysses/ulib), ULX and luadev, which includes easylua. On the
+server, clone whichever of them you do not have into `garrysmod/addons/`:
+
+```sh
+cd garrysmod/addons
+git clone https://github.com/TeamUlysses/ulib
+git clone https://github.com/TeamUlysses/ulx
+git clone https://github.com/Metastruct/luadev
+git clone https://github.com/moonexpr/ulx_luadev
+```
+
+Restart the server or change the map. Players need install nothing: the server sends them the
+client's files as they join. To check it, run `ulx l print("hello")` in the server console, or
+`!l print("hello")` in chat as a superadmin (`ulx adduser <name> superadmin`).
 
 ## Commands
 
@@ -44,12 +60,15 @@ hears a neutral sound, and its end goes unheard.
 ## Showing easylua's relative names
 
 `!print` of `me`, `this`, `we`, `wep`, `veh`, `phys`, `there`, `here`, `dir` or `trace` also draws
-it on the caller's client for a moment, without needing `developer`:
+it on the caller's client for `cl_luadev_output_overlay` seconds, without needing `developer`. The
+next `!print` of one replaces it:
 
 - a box around each entity, with lines for its name, class, position and angles; an NPC's or
   NextBot's activity, animation and target; and an NPC's schedule
 - a line from your eyes to a position, along your aim for `dir`, and along a trace with a box around
   what it hit
+
+The lines sit to the right of what they describe, facing you, with their colons lined up.
 
 Another addon can add lines to an entity's description:
 
@@ -68,7 +87,7 @@ them as they are used. Commands run from the server console use the defaults.
 |---|---|---|
 | `cl_luadev_output_maxlines` | `1` | Lines of output told in chat; `0` for none |
 | `cl_luadev_output_maxchars` | `120` | Length of a line in chat; `0` for uncut |
-| `cl_luadev_output_overlay` | `2` | Seconds `!print` shows a relative name; `0` for not |
+| `cl_luadev_output_overlay` | `120` | Seconds `!print` shows a relative name; `0` for not |
 | `cl_luadev_output_timeout` | `10` | Seconds a run's work is listened for |
 | `cl_luadev_output_success` | `buttons/button14.wav` | Success sound; empty for none |
 | `cl_luadev_output_error` | `buttons/button10.wav` | Error sound; empty for none |
