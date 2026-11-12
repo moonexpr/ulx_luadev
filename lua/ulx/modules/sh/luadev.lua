@@ -55,9 +55,12 @@ local COMMANDS = {
 	{ "lb", "Runs lua on both the server and your own client, e.g. !lb print(SERVER, CLIENT)", function(line)
 		return { { "me", line }, { "server", line } }
 	end },
-	{ "print", "Prints a value on the server, told in chat; one of easylua's (this, we, there, trace...) also shown"
-		.. " a moment where it is, e.g. !print this", function(line)
-		local name = line:match("^%s*(.-)%s*$")
+	{ "print", "Prints a value on the server, told in chat; one of easylua's (this, we, there, trace, these, those,"
+		.. " friends...) also shown a moment where it is, e.g. !print this; !print alone clears what it shows", function(line)
+		local name = (line or ""):match("^%s*(.-)%s*$")
+		if name == "" then
+			return { { "server", string.format("require(%q) luadev_overlay.Clear(me)", "luadev_overlay") } }
+		end
 		if luadev_overlay.RELATIVES[name] then
 			-- GMod's require returns nothing: the module is its global table
 			return { { "server", string.format("print(%s) require(%q) luadev_overlay.Show(me, %q, %s)", name, "luadev_overlay", name, name) } }
@@ -180,6 +183,7 @@ end
 
 local sv_allowcslua = GetConVar("sv_allowcslua")
 local LUA = { type = ULib.cmds.StringArg, hint = "lua", ULib.cmds.takeRestOfLine }
+local LUA_OPTIONAL = { type = ULib.cmds.StringArg, hint = "lua", ULib.cmds.optional, ULib.cmds.takeRestOfLine }
 
 local function add(name, help, fn, params, access)
 	local cmd = ulx.command(CATEGORY, "ulx " .. name, fn, "!" .. name)
@@ -200,7 +204,7 @@ for _, c in ipairs(COMMANDS) do
 			run(ply, name, runs(line))
 		end
 	end
-	add(name, help, fn, { LUA }, name == "lm" and ULib.ACCESS_ALL or nil)
+	add(name, help, fn, { name == "print" and LUA_OPTIONAL or LUA }, name == "lm" and ULib.ACCESS_ALL or nil)
 end
 
 add("lsc", "Runs lua on one player's client, e.g. !lsc bob print(LocalPlayer():Nick())", function(ply, target, line)

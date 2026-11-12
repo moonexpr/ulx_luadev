@@ -1,8 +1,8 @@
 AddCSLuaFile()
 
 -- luadev_overlay (ulx_luadev's): what !print of one of easylua's relative names draws for its
--- caller, for its cl_luadev_output_overlay seconds: a box around each entity (me, this, we, wep, veh,
--- phys's) with lines describing it, a line from the caller's eye to each position (there, here),
+-- caller, for its cl_luadev_output_overlay seconds: a box around each entity (me, this, wep, veh,
+-- phys's, and each of we's and of a group's: all, these, those, friends...) with lines describing it, a line from the caller's eye to each position (there, here),
 -- along the aim (dir), and along a trace with a box around what it hit. Drawn by this module on
 -- the caller's own client, which needs no developer convar, as debugoverlay does.
 --   RELATIVES -> the names shown
@@ -14,19 +14,22 @@ AddCSLuaFile()
 --   Columns(lines) -> { key, value } for each line, split at its first colon, the key keeping it
 --   TextAt(shape, right) -> the point a shape's text starts from: on the view's right of it, clear
 --     of a box however it turns and level with its middle
+--   Group(value, opts) -> a box for each entity of a list or of an easylua group
 --   Show(ply, name, value) -> sends ply the shapes, other addons' lines from the hook
 --     ULXLuaDevDescribe(ent, lines) (server)
+--   Clear(ply) -> ends what ply is shown (server)
 local SERVER, CLIENT, IsValid, CurTime, EyePos, EyeAngles = SERVER, CLIENT, IsValid, CurTime, EyePos, EyeAngles
 local hook, net, util, render, draw, cam, surface = hook, net, util, render, draw, cam, surface
 local Vector, Angle, Color = Vector, Angle, Color
 local TEXT_ALIGN_LEFT, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER = TEXT_ALIGN_LEFT, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER
-local _G, ipairs, pairs, tostring, type = _G, ipairs, pairs, tostring, type
+local _G, ipairs, pairs, tostring, type, getmetatable = _G, ipairs, pairs, tostring, type, getmetatable
 local floor, sqrt, abs, max, format, remove = math.floor, math.sqrt, math.abs, math.max, string.format, table.remove
 
 module("luadev_overlay", package.seeall)
 
 RELATIVES = { me = true, this = true, we = true, wep = true, veh = true, phys = true, there = true, here = true,
-	dir = true, trace = true }
+	dir = true, trace = true, all = true, humans = true, bots = true, afk = true, us = true, them = true, friends = true,
+	npcs = true, props = true, these = true, those = true }
 -- How far along the aim dir's line runs.
 DIR_LENGTH = 128
 -- How far past a shape its text starts, in units.
@@ -99,18 +102,26 @@ function Shapes(name, value, eye, opts)
 		local ent = value.GetEntity and value:GetEntity()
 		return Valid(ent) and { Box(ent, opts) } or {}
 	end
-	if name == "we" then
-		local shapes = {}
-		for _, ent in ipairs(value) do
-			if Valid(ent) then shapes[#shapes + 1] = Box(ent, opts) end
-		end
-		return shapes
-	end
 	if type(value.GetClass) == "function" then return Valid(value) and { Box(value, opts) } or {} end
 	if type(value.x) == "number" then
 		return { { kind = "line", from = eye, to = value, lines = { name .. ": " .. Point(value), "distance: " .. Round(Distance(eye, value)) } } }
 	end
-	return {}
+	return Group(value, opts)
+end
+
+-- A box for each entity of a list (we), or of one of easylua's groups (CreateAllFunction: all,
+-- these, those...), called for its entities now; these's are keyed by entity, so each is boxed once.
+function Group(value, opts)
+	local meta = getmetatable(value)
+	if meta and meta.__call then value = value() end
+	local shapes, seen = {}, {}
+	for _, ent in pairs(value) do
+		if Valid(ent) and not seen[ent] then
+			seen[ent] = true
+			shapes[#shapes + 1] = Box(ent, opts)
+		end
+	end
+	return shapes
 end
 
 function Columns(lines)
@@ -157,6 +168,15 @@ if SERVER then
 		net.Start(NET)
 		net.WriteFloat(seconds)
 		net.WriteTable(Shapes(name, value, ply:EyePos(), { schedules = Schedules(), more = More }))
+		net.Send(ply)
+	end
+
+	function Clear(ply)
+		if not IsValid(ply) then return end
+		-- no shapes, which replace those shown
+		net.Start(NET)
+		net.WriteFloat(0)
+		net.WriteTable({})
 		net.Send(ply)
 	end
 end
